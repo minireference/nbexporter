@@ -20,3 +20,13 @@ to export and `destdir` where to export the files.
 ```bash
 ./nbexporter.py
 ```
+
+
+TODOs
+-----
+
+- [ ] make export manifest an external .yaml file
+- [ ] package as a reusable CLI program
+- [ ] add `archive` and `diff` commands
+
+ 
