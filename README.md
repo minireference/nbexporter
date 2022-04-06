@@ -35,6 +35,7 @@ nbexporter archive --src <path or url> [--name filename]
 
 TODOs
 -----
+- [ ] add nbviewer links too
 - [ ] package as a reusable CLI program
 - [ ] implement `archive` and `diff` commands
 
