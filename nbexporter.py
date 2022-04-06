@@ -1,31 +1,16 @@
 #!/usr/bin/env python
-
+import argparse
 import io
 import os
+import re
+from urllib.parse import quote
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-
-
-# Info about which files to export (by file_id) and what filenames to use for exported files
-EXPORT_MANIFEST = {
-    "destdir": "/Users/ivan/Projects/Eductaion/mp-84-atelier",
-    "files": [
-        # {   "destname": "Notions-de-Python-1.0.ipynb",
-        #     "file_id": "1K5OipjFBFBDowYqkMc3_1KMbQAcn7Wx0"  },
-        # {   'destname': 'Exercices-1.0.ipynb',
-        #     'file_id': '172UswosDujNdB8cXu2Rn16y-h4j2ygVs'  },
-        {   'destname': 'Exercices-1.0-Solutions.ipynb',
-            'file_id': '1pfVZvKdMUinwxvTNI-rh3JFk5jyl7J-P'  },
-        # {   'destname': 'Murales-1.0.ipynb',
-        #     'file_id': '1Nn8wQgTbdTVg7emoQXGKP6tgPnSjsQPm'  },
-        # {   'destname': 'Arbres-1.0.ipynb',
-        #     'file_id': '1buBiJ2qbSqrSBYyUlISEVhnbRPbWcjlP'  },
-    ]
-}
+import yaml
 
 
 # GOOGLE OAUTH FOR GDRIVE SERVICE
@@ -59,16 +44,9 @@ service = build('drive', 'v3', credentials=creds)
 
 
 
-# # Example call the Drive v3 API
-# results = service.files().list(pageSize=10, fields="nextPageToken, files(id, name)").execute()
-# items = results.get('files', [])
-
-
-
 
 # UTILS
 ################################################################################
-
 
 def list_folder(folder_id):
     """
@@ -90,7 +68,6 @@ def list_folder(folder_id):
     return results
 
 
-
 def download_file(file_id, destpath):
     request = service.files().get_media(fileId=file_id)
     fh = io.BytesIO()
@@ -104,19 +81,133 @@ def download_file(file_id, destpath):
     print('Contents of file_id', file_id, 'saved to', destpath)
 
 
+def parse_git_url(repo_url):
+    """
+    Parse `repo_url` to extract `org` and repo `name` (for creating links).
+    """
+    git_url_pat = re.compile("(?P<host>(git@|https://)([\w\.@]+)(/|:))(?P<org>[\w,\-,\_]+)/(?P<name>[\w,\-,\_]+)(.git){0,1}((/){0,1})")
+    m = git_url_pat.match(repo_url)
+    org = m.groupdict()["org"]
+    name = m.groupdict()["name"]
+    return org, name
 
-# EXPORT
+
+
+# NOTEBOOK FILE EXPORT
 ################################################################################
 
-
-def export_files_manifest(manifest):
-    for file in manifest['files']:
+def export_files_manifest(manifest, readme=False):
+    """
+    Export the notebooks listed in the manifest to the destination directory.
+    """
+    destdir = manifest['destdir']
+    for file in manifest['notebooks']:
         print('Exporting file', file, '...')
-        destpath = os.path.join(manifest['destdir'], file['destname'])
+        destpath = os.path.join(destdir, file['file_name'])
         download_file(file['file_id'], destpath)
 
 
+
+# NOTEBOOKS README WRITER
+################################################################################
+
+IMG_LINK_TEMPLATE = "[![{badge_alt}]({badge_url})]({link_url})"
+
+badge_urls = {
+    "binder": "https://mybinder.org/badge_logo.svg",
+    "colab": "https://colab.research.google.com/assets/colab-badge.svg",
+}
+
+MYBINDER_URL_TEMPLATE = "https://mybinder.org/v2/gh/{org}/{name}/{branch}"
+MYBINDER_PATH_SUFFIX = "?labpath={urlquoted_path}"
+
+COLAB_URL_TEMPLATE = "https://colab.research.google.com/github/{org}/{name}/blob/{branch}/{path}"
+COLAB_URL_TEMPLATE_NO_PATH = "https://colab.research.google.com/github/{org}/{name}/blob/{branch}"
+
+
+def get_binder_link(org, name, branch="main", path=None):
+    """
+    Create a link that opens notebook in mybinder.org/v2/.
+    """
+    binder_link_url = MYBINDER_URL_TEMPLATE.format(
+        org=org,
+        name=name,
+        branch=branch,
+    )
+    if path:
+        urlquoted_path = quote(path, safe='')
+        binder_link_url += MYBINDER_PATH_SUFFIX.format(urlquoted_path=urlquoted_path)
+    binder_link = IMG_LINK_TEMPLATE.format(
+        badge_alt="Binder",
+        badge_url=badge_urls['binder'],
+        link_url=binder_link_url
+    )
+    return binder_link
+
+
+def get_colab_link(org, name, branch="main", path=None):
+    """
+    Create a link that opens notebook in Google Colab.
+    """
+    if not path:
+        raise ValueError("Colab links require a path to a notebook")
+    colab_link_url = COLAB_URL_TEMPLATE.format(
+        org=org,
+        name=name,
+        branch=branch,
+        path=path,
+    )
+    colab_link = IMG_LINK_TEMPLATE.format(
+        badge_alt="Colab",
+        badge_url=badge_urls['colab'],
+        link_url=colab_link_url
+    )
+    return colab_link
+
+
+def write_readme(manifest, branch="main", subdir="notebooks", binder=True, colab=True):
+    """
+    Create a README.md file in the destination directory with mybinder and colab
+    links to all the notebooks in the export manifest.
+    """
+    org, name = parse_git_url(manifest["repo_url"])
+    README = "# Notebooks\n\n"
+    for file in manifest['notebooks']:
+        file_name = file['file_name']
+        path = os.path.join(subdir, file_name)
+        binder_link = get_binder_link(org, name, branch="main", path=path)
+        colab_link = get_colab_link(org, name, branch="main", path=path)
+        README += f"- {file_name}"
+        if binder:
+            README += f" {binder_link}"
+        if colab:
+            README += f" {colab_link}"
+        README += "\n"
+
+    destdir = manifest['destdir']
+    readme_path = os.path.join(destdir, "README.md")
+    with open(readme_path, "w") as readme_file:
+        readme_file.write(README)
+
+
+
+# CLI
+################################################################################
+
 if __name__ == '__main__':
-    export_files_manifest(EXPORT_MANIFEST)
+    parser = argparse.ArgumentParser(description='Notebook exporter')
+    parser.add_argument('--manifest', required=True, help="YAML manifest file")
+    parser.add_argument('--readme', action='store_true', help="Write README.md")
+    args = parser.parse_args()
 
+    manifest = yaml.safe_load(open(args.manifest))
+    # Check manifest file format
+    assert manifest["destdir"], "Manifest file is missing destdir key"
+    assert manifest["notebooks"], "Manifest file is missing notebooks list"
+    
+    export_files_manifest(manifest)
 
+    if args.readme:
+        # Write the notebooks/READEME.md file
+        assert manifest["repo_url"], "Manifest file is missing repo_url key"
+        write_readme(manifest, branch="main", subdir="notebooks", binder=True, colab=True)

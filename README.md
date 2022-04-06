@@ -1,13 +1,12 @@
 # nbexporter
-Tools for exporing [archiving, diffing] Jupyter notebooks stored in gdrive to a git repo.
+Tools for exporting Google Colab notebooks from gdrive to `.ipynb` files in a git repo.
 
 
 ## Features
 - export notebooks from google drive (requires google oauth client setup, and provide secrets as ENV vars)
-- (optional) process notebooks to create learner version (no solutions) and coach versions (with solutoins):
-  see https://github.com/NeuromatchAcademy/course-content/blob/master/ci/process_notebooks.py#L7-L8
 
 
+<!--
 ## Install
 
 ```bash
@@ -16,35 +15,28 @@ pip install nbexporter
 
 You can now run the command line script `nbexporter`.
 
+Future ideas...
+```
+nbexporter diff --old <path or url>  --new <path or url>
+nbexporter archive --src <path or url> [--name filename]
+```
+-->
 
 ## Usage
 
 ```bash
-nbexporter export --src <url> --dest <path>
+# export multiple notebooks specified in a YTML manifest file
+./nbexporter.py --manifest <path>
 
-# save to archives/YYYY-MM-DD/filenme.ipynb
-nbexporter archive --src <path or url> [--name filename]
-
-# export multiple notebooks specified in a "manifest" file
-nbexporter export --manifest <path>
-# or if you do this often...
-export EXPORT_MANIFEST="exercises.yaml"; nbexporter export 
-
-# diffs for y'all!
-nbexporter diff --old <path or url>  --new <path or url>
-
+# same as above but also writes a README.md with binder and colab links
+./nbexporter.py --manifest <path> --readme
 ```
-
 
 
 TODOs
 -----
-
-- [ ] make export manifest an external .yaml file
 - [ ] package as a reusable CLI program
-- [ ] add `archive` and `diff` commands
-
- 
+- [ ] implement `archive` and `diff` commands
 
 
 
@@ -55,6 +47,7 @@ Roadmap
 - export to MyST, see https://jupyterbook.org/intro.html
 
 
-
-
-
+Stretch goals
+-------------
+- process notebooks to create learner version (no solutions) and solutions version
+  see https://github.com/NeuromatchAcademy/nmaci/blob/main/scripts/process_notebooks.py#L226-L298
