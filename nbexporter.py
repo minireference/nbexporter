@@ -10,6 +10,7 @@ from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from nbconvert import NotebookExporter
 import yaml
 
 
@@ -105,6 +106,12 @@ def export_files_manifest(manifest, readme=False):
         print('Exporting file', file, '...')
         destpath = os.path.join(destdir, file['file_name'])
         download_file(file['file_id'], destpath)
+
+        # reformat notebook JSON to avoid diffs bâtard
+        # equivalent to command `jupyter-nbconvert --to notebook  --inplace`
+        nbsrc, _resources = NotebookExporter().from_filename(filename=destpath)
+        with open(destpath, "w") as nbfile:
+            nbfile.write(nbsrc)
 
 
 
