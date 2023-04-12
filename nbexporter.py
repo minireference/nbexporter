@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 import argparse
+from collections import deque
 import io
 import os
 import re
 from urllib.parse import quote
+
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -203,18 +205,47 @@ def write_readme(manifest, branch="main", subdir="notebooks", binder=True, colab
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Notebook exporter')
-    parser.add_argument('--manifest', required=True, help="YAML manifest file")
+    parser.add_argument('--manifest', help="YAML manifest file")
     parser.add_argument('--readme', action='store_true', help="Write README.md")
+    parser.add_argument('--list', help="ID of Gdrive direcory containing notebooks")
     args = parser.parse_args()
 
-    manifest = yaml.safe_load(open(args.manifest))
-    # Check manifest file format
-    assert manifest["destdir"], "Manifest file is missing destdir key"
-    assert manifest["notebooks"], "Manifest file is missing notebooks list"
-    
-    export_files_manifest(manifest)
+    if args.manifest and args.list:
+        print("Need to specify either manifest file with --manifest or folder ID to --list")
+        os.exit(1)
 
-    if args.readme:
-        # Write the notebooks/READEME.md file
-        assert manifest["repo_url"], "Manifest file is missing repo_url key"
-        write_readme(manifest, branch="main", subdir="notebooks", binder=True, colab=True)
+    if args.list:
+        # Recusively print list of all notebooks in a given google drive folder
+        # in the format ready for copy-paste into a manifest.yaml file
+        folder_id = args.list
+        results = list_folder(folder_id)
+        queue = deque()
+        queue.extend(results)
+        notebooks = []
+        while queue:
+            result = queue.popleft()
+            if result['mimeType'] in ['application/vnd.google.colaboratory', 'application/json']:
+                if not result["name"].lower().endswith(".ipynb"):
+                    print("Skipping", result["name"], "because it doesn't seem to be a notebook...")
+                    continue
+                notebook = {"file_id":result["id"], "file_name":result["name"]}
+                notebooks.append(notebook)
+            elif result['mimeType'] == 'application/vnd.google-apps.folder':
+                subfolder_results = list_folder(result["id"])
+                queue.extend(subfolder_results)
+            else:
+                print("Skipping", result["name"], "of type", result["mimeType"])
+        print(yaml.dump(notebooks))
+
+    elif args.manifest:
+        manifest = yaml.safe_load(open(args.manifest))
+        # Check manifest file format
+        assert manifest["destdir"], "Manifest file is missing destdir key"
+        assert manifest["notebooks"], "Manifest file is missing notebooks list"
+        
+        export_files_manifest(manifest)
+
+        if args.readme:
+            # Write the notebooks/READEME.md file
+            assert manifest["repo_url"], "Manifest file is missing repo_url key"
+            write_readme(manifest, branch="main", subdir="notebooks", binder=True, colab=True)
