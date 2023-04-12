@@ -24,7 +24,11 @@ nbexporter archive --src <path or url> [--name filename]
 
 ## Usage
 
+
 ```bash
+# list all the notebook-like files in a folder gdrive
+./nbexporter.py --list <gdrive folder id>
+
 # export multiple notebooks specified in a YTML manifest file
 ./nbexporter.py --manifest <path>
 
